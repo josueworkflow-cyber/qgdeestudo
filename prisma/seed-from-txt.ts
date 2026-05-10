@@ -95,7 +95,6 @@ async function main() {
   await prisma.tarefaEstudo.deleteMany();
   await prisma.missaoDiaria.deleteMany();
   await prisma.revisaoProgramada.deleteMany();
-  await prisma.topicoCritico.deleteMany();
   await prisma.historicoCiclo.deleteMany();
   await prisma.cicloEstudo.deleteMany();
   await prisma.planoEstudo.deleteMany();

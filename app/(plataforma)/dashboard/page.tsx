@@ -221,7 +221,6 @@ export default async function DashboardPage() {
                       {t.tipo === "FLASHCARD" && <Brain size={14} color="#6b7c5c" />}
                       {t.tipo === "QUESTAO" && <Target size={14} color="#2d5a9e" />}
                       {t.tipo === "SIMULADO" && <Layers size={14} color="#9a6e3d" />}
-                      {t.tipo === "REVISAO_ERRO" && <TriangleAlert size={14} color="#e05a30" />}
                       <span>{t.descricao}</span>
                       {t.concluida && (
                         <CheckCircle2 size={14} color="var(--color-olive-em)" style={{ marginLeft: "auto", flexShrink: 0 }} />

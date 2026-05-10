@@ -42,7 +42,6 @@ export interface DadosPlanoEstudo {
       conteudoNovo: number;
       revisaoFlashcards: number;
       questoes: number;
-      revisaoErros: number;
     };
   };
   ciclo: {
@@ -67,7 +66,6 @@ export interface DadosPlanoEstudo {
     flashcardsParaFazer: string[];
     questoesParaFazer: number;
     simuladoParaFazer: boolean;
-    errosParaRevisar: string[];
     tarefas: {
       id: string;
       tipo: string;
@@ -88,14 +86,6 @@ export interface DadosPlanoEstudo {
     dataRevisao: Date;
     intervalo: string;
     concluida: boolean;
-  }[];
-  topicosCriticos: {
-    id: string;
-    temaId: string;
-    nome: string;
-    totalErros: number;
-    taxaAcerto: number;
-    nivel: string;
   }[];
   historicoCiclos: {
     numeroCiclo: number;
@@ -372,7 +362,7 @@ export async function atualizarConfigHoras(
 export async function gerarMissaoDiaria(
   planoId: string,
   cicloId: string,
-  metodo: { id: string; pesoConteudoNovo: number; pesoRevisaoFlashcards: number; pesoQuestoes: number; pesoRevisaoErros: number; slug: string }
+  metodo: { id: string; pesoConteudoNovo: number; pesoRevisaoFlashcards: number; pesoQuestoes: number; slug: string }
 ) {
   const plano = await prisma.planoEstudo.findUnique({
     where: { id: planoId },
@@ -399,7 +389,6 @@ export async function gerarMissaoDiaria(
         flashcardsParaFazer: [],
         questoesParaFazer: 0,
         simuladoParaFazer: false,
-        errosParaRevisar: [],
         concluida: true,
       },
     });
@@ -515,19 +504,6 @@ export async function gerarMissaoDiaria(
     },
   });
 
-  // Erros do usuário (simulados recentes)
-  const errosRecentes = await prisma.resposta.findMany({
-    where: {
-      resultado: { usuarioId: plano.usuarioId },
-      correta: false,
-    },
-    include: { questao: { include: { tema: true } } },
-    orderBy: { resultado: { criadoEm: "desc" } },
-    take: 5,
-  });
-
-  const errosTemaIds = [...new Set(errosRecentes.map((e) => e.questao.temaId))];
-
   // Criar missão
   const missao = await prisma.missaoDiaria.create({
     data: {
@@ -540,7 +516,6 @@ export async function gerarMissaoDiaria(
       simuladoParaFazer: metodo.slug === "sobrevivencia"
         ? (plano.minutosSimulado || 0) > 0
         : metodo.pesoQuestoes >= 25 && ciclo.numero >= 2,
-      errosParaRevisar: errosTemaIds,
     },
   });
 
@@ -572,7 +547,7 @@ export async function gerarMissaoDiaria(
       missaoId: missao.id,
       tipo: "REVISAO",
       recursoId: revisao.temaId,
-      descricao: `Revisar tema (${revisao.intervalo})`,
+      descricao: `Revisar tema (${revisao.intervalo}) · ~${Math.round(MINUTOS_POR_TEMA / 2)} min`,
     });
   }
 
@@ -602,15 +577,6 @@ export async function gerarMissaoDiaria(
       tipo: "SIMULADO",
       recursoId: null,
       descricao: "Realizar simulado diagnóstico",
-    });
-  }
-
-  if (errosTemaIds.length > 0) {
-    tarefas.push({
-      missaoId: missao.id,
-      tipo: "REVISAO_ERRO",
-      recursoId: errosTemaIds[0],
-      descricao: "Revisar temas com erros recentes",
     });
   }
 
@@ -764,7 +730,8 @@ export async function gerarCronogramaSemanal(
     const minutosConteudo = temasPorDia * MINUTOS_POR_TEMA;
     const minutosFlash = Math.round(flashcardsPorDia * MINUTOS_POR_FLASHCARD);
     const minutosQuest = Math.round(questoesPorDia * MINUTOS_POR_QUESTAO);
-    const minutosRestantes = Math.max(0, minutosDisponiveis - minutosConteudo - minutosFlash - minutosQuest);
+    // Revisão espaçada: metade do conteúdo, é um extra (não entra no orçamento diário)
+    const minutosRevisao = Math.round(minutosConteudo / 2 / MINUTOS_POR_TEMA) * MINUTOS_POR_TEMA;
 
     // Pegar matéria do pool intercalado
     const diaIdx = diasEstudoEstaSemana.findIndex(d => d.idx === i);
@@ -782,13 +749,14 @@ export async function gerarCronogramaSemanal(
     // Demais atividades
     if (metodo.slug === "combate") {
       tarefas.push({ tipo: "QUESTAO", descricao: `Questões e simulados · ~${minutosQuest} min` });
-      tarefas.push({ tipo: "REVISAO_ERRO", descricao: `Revisão de erros · ~${minutosRestantes} min` });
+      tarefas.push({ tipo: "REVISAO", descricao: `Revisão espaçada (extra) · +${minutosRevisao} min` });
     } else if (metodo.slug === "doutrina" || metodo.slug === "sobrevivencia") {
-      tarefas.push({ tipo: "REVISAO", descricao: `Revisão espaçada · ~${minutosRestantes} min` });
+      tarefas.push({ tipo: "REVISAO", descricao: `Revisão espaçada (extra) · +${minutosRevisao} min` });
       tarefas.push({ tipo: "FLASHCARD", descricao: `Flashcards de memorização · ~${minutosFlash} min` });
     } else {
       tarefas.push({ tipo: "FLASHCARD", descricao: `Flashcards de matérias recentes · ~${minutosFlash} min` });
       tarefas.push({ tipo: "QUESTAO", descricao: `Questões de matérias alternadas · ~${minutosQuest} min` });
+      tarefas.push({ tipo: "REVISAO", descricao: `Revisão espaçada (extra) · +${minutosRevisao} min` });
     }
 
     cronograma.push({ dia: diasNomes[diaSemana], data, tarefas });
@@ -890,12 +858,6 @@ export async function finalizarCiclo(usuarioId: string) {
     ? (cicloAtual.acertos / cicloAtual.totalQuestoes) * 100
     : 0;
 
-  const topicosCriticos = await prisma.topicoCritico.findMany({
-    where: { planoId: plano.id },
-    orderBy: { totalErros: "desc" },
-    take: 10,
-  });
-
   // Finalizar ciclo atual
   const cicloFinalizado = await prisma.cicloEstudo.update({
     where: { id: cicloAtual.id },
@@ -921,7 +883,6 @@ export async function finalizarCiclo(usuarioId: string) {
       flashcardsVistos: cicloAtual.flashcardsVistos,
       questoesRealizadas: cicloAtual.totalQuestoes,
       taxaAcerto,
-      temasCriticos: topicosCriticos.map((t) => ({ nome: t.nome, totalErros: t.totalErros, taxaAcerto: t.taxaAcerto })),
     },
   });
 
@@ -1041,7 +1002,6 @@ export async function buscarDadosPlano(usuarioId: string): Promise<DadosPlanoEst
           flashcardsParaFazer: [],
           questoesParaFazer: 0,
           simuladoParaFazer: false,
-          errosParaRevisar: [],
         },
       });
       missao = await prisma.missaoDiaria.findUnique({
@@ -1084,12 +1044,6 @@ export async function buscarDadosPlano(usuarioId: string): Promise<DadosPlanoEst
   });
   const temasMap = new Map(temasRevisao.map((t) => [t.id, t.titulo]));
 
-  const topicosCriticos = await prisma.topicoCritico.findMany({
-    where: { planoId: plano.id },
-    orderBy: { totalErros: "desc" },
-    take: 10,
-  });
-
   const historico = await prisma.historicoCiclo.findMany({
     where: { usuarioId },
     orderBy: { numeroCiclo: "desc" },
@@ -1127,7 +1081,6 @@ export async function buscarDadosPlano(usuarioId: string): Promise<DadosPlanoEst
         conteudoNovo: plano.metodo.pesoConteudoNovo,
         revisaoFlashcards: plano.metodo.pesoRevisaoFlashcards,
         questoes: plano.metodo.pesoQuestoes,
-        revisaoErros: plano.metodo.pesoRevisaoErros,
       },
     },
     ciclo: cicloAtual
@@ -1155,7 +1108,6 @@ export async function buscarDadosPlano(usuarioId: string): Promise<DadosPlanoEst
           flashcardsParaFazer: missao.flashcardsParaFazer,
           questoesParaFazer: missao.questoesParaFazer,
           simuladoParaFazer: missao.simuladoParaFazer,
-          errosParaRevisar: missao.errosParaRevisar,
           tarefas: missao.tarefas.map((t) => ({
             id: t.id,
             tipo: t.tipo,
@@ -1173,14 +1125,6 @@ export async function buscarDadosPlano(usuarioId: string): Promise<DadosPlanoEst
       dataRevisao: r.dataRevisao,
       intervalo: r.intervalo,
       concluida: r.concluida,
-    })),
-    topicosCriticos: topicosCriticos.map((t) => ({
-      id: t.id,
-      temaId: t.temaId,
-      nome: t.nome,
-      totalErros: t.totalErros,
-      taxaAcerto: t.taxaAcerto,
-      nivel: t.nivel,
     })),
     historicoCiclos: historico.map((h) => ({
       numeroCiclo: h.numeroCiclo,

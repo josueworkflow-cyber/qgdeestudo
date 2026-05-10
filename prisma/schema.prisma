@@ -224,7 +224,6 @@ model MetodoEstudo {
   pesoConteudoNovo      Int
   pesoRevisaoFlashcards Int
   pesoQuestoes          Int
-  pesoRevisaoErros      Int
 
   duracaoMediaDias      Int
   velocidadeRevisao     String
@@ -257,7 +256,6 @@ model PlanoEstudo {
   ciclos            CicloEstudo[]
   missoes           MissaoDiaria[]
   revisoes          RevisaoProgramada[]
-  topicosCriticos   TopicoCritico[]
 }
 
 model CicloEstudo {
@@ -276,7 +274,6 @@ model CicloEstudo {
   acertos           Int             @default(0)
   erros             Int             @default(0)
   taxaAcerto        Float?
-  temasCriticos     Json            @default("[]")
 
   historico         HistoricoCiclo?
 }
@@ -293,7 +290,6 @@ model MissaoDiaria {
   flashcardsParaFazer  String[]      @default([])
   questoesParaFazer    Int           @default(0)
   simuladoParaFazer    Boolean       @default(false)
-  errosParaRevisar     String[]      @default([])
 
   tarefas              TarefaEstudo[]
 }
@@ -318,18 +314,6 @@ model RevisaoProgramada {
   concluida    Boolean      @default(false)
   concluidaEm  DateTime?
   intervalo    String
-}
-
-model TopicoCritico {
-  id             String       @id @default(cuid())
-  planoId        String
-  plano          PlanoEstudo  @relation(fields: [planoId], references: [id], onDelete: Cascade)
-  temaId         String
-  nome           String
-  totalErros     Int          @default(0)
-  taxaAcerto     Float        @default(0)
-  ultimaRevisao  DateTime?
-  nivel          String       @default("ALERTA")
 }
 
 model HistoricoCiclo {

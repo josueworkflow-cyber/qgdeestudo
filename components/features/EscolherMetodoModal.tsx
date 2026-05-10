@@ -9,7 +9,6 @@ interface MetodoInfo {
   nome: string;
   icon: React.ReactNode;
   descricao: string;
-  perfil: string;
   duracao: string;
   detalhes: { label: string; value: string }[];
 }
@@ -20,27 +19,11 @@ const METODOS: MetodoInfo[] = [
     nome: "Doutrina",
     icon: <BookOpen size={28} />,
     descricao: "Repetição espaçada, flashcards e memorização contínua. Ideal para quem aprende melhor repetindo.",
-    perfil: "Aluno que aprende melhor repetindo.",
     duracao: "~4 meses para concluir 100%",
     detalhes: [
-      { label: "Conteúdo novo", value: "30% do tempo" },
-      { label: "Revisão + Flashcards", value: "45% do tempo" },
-      { label: "Questões", value: "15% do tempo" },
-      { label: "Revisão de erros", value: "10% do tempo" },
-    ],
-  },
-  {
-    slug: "combate",
-    nome: "Combate",
-    icon: <Swords size={28} />,
-    descricao: "Active recall, questões e simulados. Ideal para quem aprende melhor executando.",
-    perfil: "Aluno que aprende melhor executando.",
-    duracao: "~3 meses para concluir 100%",
-    detalhes: [
-      { label: "Conteúdo novo", value: "25% do tempo" },
-      { label: "Revisão + Flashcards", value: "25% do tempo" },
-      { label: "Questões + Simulados", value: "35% do tempo" },
-      { label: "Revisão de erros", value: "15% do tempo" },
+      { label: "Conteúdo novo", value: "45% do tempo" },
+      { label: "Flashcards", value: "30% do tempo" },
+      { label: "Questões", value: "25% do tempo" },
     ],
   },
   {
@@ -48,13 +31,23 @@ const METODOS: MetodoInfo[] = [
     nome: "Operativo",
     icon: <Layers size={28} />,
     descricao: "Interleaving e alternância estratégica de disciplinas. Ideal para quem aprende melhor alternando.",
-    perfil: "Aluno que aprende melhor alternando disciplinas.",
     duracao: "~3-4 meses para concluir 100%",
     detalhes: [
       { label: "Conteúdo novo", value: "30% do tempo" },
-      { label: "Revisão + Flashcards", value: "30% do tempo" },
-      { label: "Questões", value: "25% do tempo" },
-      { label: "Revisão de erros", value: "15% do tempo" },
+      { label: "Flashcards", value: "25% do tempo" },
+      { label: "Questões", value: "45% do tempo" },
+    ],
+  },
+  {
+    slug: "combate",
+    nome: "Combate",
+    icon: <Swords size={28} />,
+    descricao: "Active recall, questões e simulados. Ideal para quem aprende melhor executando.",
+    duracao: "~3 meses para concluir 100%",
+    detalhes: [
+      { label: "Conteúdo novo", value: "15% do tempo" },
+      { label: "Flashcards", value: "20% do tempo" },
+      { label: "Questões + Simulados", value: "65% do tempo" },
     ],
   },
   {
@@ -62,7 +55,6 @@ const METODOS: MetodoInfo[] = [
     nome: "Sobrevivência",
     icon: <Shield size={28} />,
     descricao: "Ritmo totalmente personalizado. Você define horas por dia, dias da semana e data da prova. O sistema distribui o conteúdo proporcionalmente.",
-    perfil: "Aluno com rotina restrita que precisa de controle total sobre o ritmo.",
     duracao: "Depende da sua configuração",
     detalhes: [
       { label: "Horas por dia", value: "Você define" },
@@ -214,10 +206,18 @@ export function EscolherMetodoModal({ onSelecionar, onClose }: { onSelecionar: (
                           </span>
                         </div>
                         <p className="muted" style={{ fontSize: 13, margin: "0 0 8px", lineHeight: 1.5 }}>
-                          {metodo.descricao}
-                        </p>
-                        <p style={{ fontSize: 12, color: "var(--color-olive-em)", margin: "0 0 8px" }}>
-                          {metodo.perfil}
+                          {(() => {
+                            const idx = metodo.descricao.indexOf("Ideal");
+                            if (idx === -1) return metodo.descricao;
+                            return (
+                              <>
+                                {metodo.descricao.slice(0, idx)}
+                                <span style={{ color: "var(--color-olive-em)" }}>
+                                  {metodo.descricao.slice(idx)}
+                                </span>
+                              </>
+                            );
+                          })()}
                         </p>
                         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                           {metodo.detalhes.map((d) => (

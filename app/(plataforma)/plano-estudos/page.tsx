@@ -15,7 +15,6 @@ import {
   Swords,
   Target,
   TrendingUp,
-  TriangleAlert,
   Trophy,
   Zap,
 } from "lucide-react";
@@ -44,7 +43,6 @@ interface Missao {
   flashcardsParaFazer: string[];
   questoesParaFazer: number;
   simuladoParaFazer: boolean;
-  errosParaRevisar: string[];
   tarefas: Tarefa[];
 }
 
@@ -82,7 +80,6 @@ interface Plano {
     conteudoNovo: number;
     revisaoFlashcards: number;
     questoes: number;
-    revisaoErros: number;
   };
 }
 
@@ -93,15 +90,6 @@ interface RevisaoProgramada {
   dataRevisao: string;
   intervalo: string;
   concluida: boolean;
-}
-
-interface TopicoCritico {
-  id: string;
-  temaId: string;
-  nome: string;
-  totalErros: number;
-  taxaAcerto: number;
-  nivel: string;
 }
 
 interface HistoricoCiclo {
@@ -127,7 +115,6 @@ interface DadosPlano {
   missao: Missao | null;
   cronogramaSemanal: CronogramaItem[];
   revisoesProgramadas: RevisaoProgramada[];
-  topicosCriticos: TopicoCritico[];
   historicoCiclos: HistoricoCiclo[];
   progressoGeral: {
     percentualEstudado: number;
@@ -148,7 +135,7 @@ const METODOS = [
     icon: BookOpen,
     descricao: "Repetição espaçada e memorização contínua",
     cor: "#8fa876",
-    pesos: { conteudoNovo: 30, revisaoFlashcards: 45, questoes: 15, revisaoErros: 10 },
+    pesos: { conteudoNovo: 45, revisaoFlashcards: 30, questoes: 25 },
   },
   {
     slug: "combate",
@@ -156,7 +143,7 @@ const METODOS = [
     icon: Swords,
     descricao: "Active recall com questões e simulados",
     cor: "#d4900a",
-    pesos: { conteudoNovo: 25, revisaoFlashcards: 25, questoes: 35, revisaoErros: 15 },
+    pesos: { conteudoNovo: 15, revisaoFlashcards: 20, questoes: 65 },
   },
   {
     slug: "operativo",
@@ -164,7 +151,7 @@ const METODOS = [
     icon: Layers,
     descricao: "Interleaving e alternância estratégica",
     cor: "#2d5a9e",
-    pesos: { conteudoNovo: 30, revisaoFlashcards: 30, questoes: 25, revisaoErros: 15 },
+    pesos: { conteudoNovo: 30, revisaoFlashcards: 25, questoes: 45 },
   },
   {
     slug: "sobrevivencia",
@@ -172,7 +159,7 @@ const METODOS = [
     icon: Shield,
     descricao: "Ritmo personalizado até a prova",
     cor: "#f0a820",
-    pesos: { conteudoNovo: 30, revisaoFlashcards: 30, questoes: 25, revisaoErros: 15 },
+    pesos: { conteudoNovo: 30, revisaoFlashcards: 25, questoes: 45 },
   },
 ];
 
@@ -182,7 +169,6 @@ const TIPO_ICONES: Record<string, React.ReactNode> = {
   FLASHCARD: <Brain size={14} />,
   QUESTAO: <Target size={14} />,
   SIMULADO: <Layers size={14} />,
-  REVISAO_ERRO: <TriangleAlert size={14} />,
 };
 
 const TIPO_LABELS: Record<string, string> = {
@@ -191,7 +177,6 @@ const TIPO_LABELS: Record<string, string> = {
   FLASHCARD: "Flashcard",
   QUESTAO: "Questão",
   SIMULADO: "Simulado",
-  REVISAO_ERRO: "Revisão de Erro",
 };
 
 const STATUS_MESSAGES: Record<string, string> = {
@@ -510,21 +495,29 @@ export default function PlanoEstudosPage() {
                 const minConteudo = conteudoTemas * 20;
                 const minFlash = Math.round(flashcardsQtd * 1.5);
                 const minQuest = Math.round(questoesQtd * 2.5);
-                const minResto = Math.max(0, totalMin - minConteudo - minFlash - minQuest);
                 const itens = [
                   { label: "Conteúdo novo", pct: pesos.conteudoNovo, min: minConteudo },
-                  { label: "Revisão + Flashcards", pct: pesos.revisaoFlashcards, min: minFlash },
+                  { label: "Flashcards", pct: pesos.revisaoFlashcards, min: minFlash },
                   { label: "Questões", pct: pesos.questoes, min: minQuest },
-                  { label: "Revisão de erros", pct: pesos.revisaoErros, min: minResto },
                 ];
-                return itens.map((item) => (
-                  <div key={item.label} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                    <span>{item.label}</span>
-                    <span className="muted">
-                      {item.pct}% · ~{item.min} min
-                    </span>
-                  </div>
-                ));
+                return (
+                  <>
+                    {itens.map((item) => (
+                      <div key={item.label} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                        <span>{item.label}</span>
+                        <span className="muted">
+                          {item.pct}% · ~{item.min} min
+                        </span>
+                      </div>
+                    ))}
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, borderTop: "1px solid var(--color-border)", paddingTop: 6 }}>
+                      <span style={{ color: "var(--color-olive-em)" }}>+ Revisão espaçada (½ conteúdo)</span>
+                      <span className="muted" style={{ color: "var(--color-olive-em)" }}>
+                        +{Math.round(minConteudo / 2 / 20) * 20} min
+                      </span>
+                    </div>
+                  </>
+                );
               })()}
             </div>
           </div>
@@ -966,59 +959,6 @@ export default function PlanoEstudosPage() {
             ) : (
               <p className="muted">
                 As revisões serão geradas conforme você avança no conteúdo.
-              </p>
-            )}
-          </Card>
-        </section>
-
-        {/* ===== ÁREA CRÍTICA ===== */}
-        <section>
-          <h3 className="section-title" style={{ fontSize: 24, marginBottom: 16 }}>
-            <TriangleAlert size={20} style={{ marginRight: 8 }} />
-            Área crítica
-          </h3>
-          <Card>
-            {dados.topicosCriticos.length > 0 ? (
-              <div className="grid" style={{ gap: 8 }}>
-                {dados.topicosCriticos.slice(0, 6).map((tc) => {
-                  const nivel = NIVEL_CORES[tc.nivel] || NIVEL_CORES.ALERTA;
-                  return (
-                    <div
-                      key={tc.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "10px 12px",
-                        borderRadius: "var(--radius-sm)",
-                        border: "1px solid var(--color-border)",
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 500, fontSize: 14 }}>{tc.nome}</div>
-                        <div style={{ fontSize: 13, color: "var(--color-text-muted)" }}>
-                          {tc.totalErros} erros · {Math.round(tc.taxaAcerto)}% acerto
-                        </div>
-                      </div>
-                      <span
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 700,
-                          padding: "2px 8px",
-                          borderRadius: 999,
-                          background: nivel.bg,
-                          color: nivel.text,
-                        }}
-                      >
-                        {tc.nivel}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="muted">
-                A área crítica mostra os temas com maior taxa de erro. Realize simulados para identificar pontos fracos.
               </p>
             )}
           </Card>

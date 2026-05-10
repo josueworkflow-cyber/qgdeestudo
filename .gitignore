@@ -6,3 +6,13 @@ dist
 coverage
 *.log
 NUL
+.DS_Store
+*.tsbuildinfo
+.vscode/
+.idea/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.next/
+out/
+build/

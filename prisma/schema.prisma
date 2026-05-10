@@ -1,0 +1,350 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Usuario {
+  id              String              @id @default(cuid())
+  nome            String
+  email           String              @unique
+  senhaHash       String
+  ativo           Boolean             @default(true)
+  criadoEm        DateTime            @default(now())
+  assinatura      Assinatura?
+  progresso       Progresso[]
+  sessoes         SessaoEstudo[]
+  resultados      ResultadoSimulado[]
+  accounts        Account[]
+  sessions        Session[]
+  planoEstudo     PlanoEstudo?
+  historicoCiclos HistoricoCiclo[]
+}
+
+model Assinatura {
+  id        String    @id @default(cuid())
+  usuarioId String    @unique
+  usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  status    String
+  inicio    DateTime
+  fim       DateTime?
+  plano     String
+}
+
+model Materia {
+  id    String @id @default(cuid())
+  nome  String
+  slug  String @unique
+  ordem Int
+  temas Tema[]
+}
+
+model Tema {
+  id         String           @id @default(cuid())
+  materiaId  String
+  materia    Materia          @relation(fields: [materiaId], references: [id], onDelete: Cascade)
+  titulo     String
+  slug       String
+  ordem      Int
+  topicos    Topico[]
+  questoes   Questao[]
+  flashcards Flashcard[]
+  imagens    ImagemConteudo[]
+  progresso  Progresso[]
+
+  @@unique([materiaId, slug])
+}
+
+model Topico {
+  id        String   @id @default(cuid())
+  temaId    String
+  tema      Tema     @relation(fields: [temaId], references: [id])
+  titulo    String
+  slug      String
+  conteudo  String   @db.Text
+  ordem     Int
+}
+
+model ImagemConteudo {
+  id       String  @id @default(cuid())
+  temaId   String
+  tema     Tema    @relation(fields: [temaId], references: [id], onDelete: Cascade)
+  legenda  String
+  caminho  String
+  ordem    Int
+  refTexto String?
+}
+
+model Questao {
+  id           String             @id @default(cuid())
+  temaId       String
+  tema         Tema               @relation(fields: [temaId], references: [id], onDelete: Cascade)
+  enunciado    String             @db.Text
+  alternativas Json
+  gabarito     String
+  explicacao   String?            @db.Text
+  dificuldade  String
+  simulados    SimuladoQuestao[]
+  respostas    Resposta[]
+}
+
+model Flashcard {
+  id        String               @id @default(cuid())
+  temaId    String
+  tema      Tema                 @relation(fields: [temaId], references: [id], onDelete: Cascade)
+  frente    String               @db.Text
+  verso     String               @db.Text
+  progresso FlashcardProgresso[]
+}
+
+model Simulado {
+  id          String              @id @default(cuid())
+  titulo      String
+  tipo        String
+  tempoLimite Int?
+  questoes    SimuladoQuestao[]
+  resultados  ResultadoSimulado[]
+}
+
+model SimuladoQuestao {
+  simuladoId String
+  questaoId  String
+  ordem      Int
+  simulado   Simulado @relation(fields: [simuladoId], references: [id], onDelete: Cascade)
+  questao    Questao  @relation(fields: [questaoId], references: [id], onDelete: Cascade)
+
+  @@id([simuladoId, questaoId])
+}
+
+model ResultadoSimulado {
+  id         String    @id @default(cuid())
+  usuarioId  String
+  simuladoId String
+  usuario    Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  simulado   Simulado  @relation(fields: [simuladoId], references: [id], onDelete: Cascade)
+  acertos    Int
+  total      Int
+  tempoGasto Int?
+  respostas  Resposta[]
+  criadoEm   DateTime  @default(now())
+}
+
+model Resposta {
+  id          String             @id @default(cuid())
+  resultadoId String
+  questaoId   String
+  resultado   ResultadoSimulado @relation(fields: [resultadoId], references: [id], onDelete: Cascade)
+  questao     Questao            @relation(fields: [questaoId], references: [id], onDelete: Cascade)
+  resposta    String
+  correta     Boolean
+}
+
+model Progresso {
+  id        String    @id @default(cuid())
+  usuarioId String
+  temaId    String
+  usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  tema      Tema      @relation(fields: [temaId], references: [id], onDelete: Cascade)
+  lido      Boolean   @default(false)
+  lidoEm    DateTime?
+
+  @@unique([usuarioId, temaId])
+}
+
+model FlashcardProgresso {
+  id          String    @id @default(cuid())
+  usuarioId   String
+  flashcardId String
+  flashcard   Flashcard @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
+  resultado   String
+  revisarEm   DateTime?
+
+  @@unique([usuarioId, flashcardId])
+}
+
+model SessaoEstudo {
+  id         String    @id @default(cuid())
+  usuarioId  String
+  usuario    Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  inicio     DateTime
+  fim        DateTime?
+  duracaoMin Int?
+  materiaId  String?
+  tipo       String
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              Usuario @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         Usuario  @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============================================================
+// SISTEMA DE PLANO DE ESTUDO
+// ============================================================
+
+model MetodoEstudo {
+  id                    String       @id @default(cuid())
+  nome                  String
+  slug                  String       @unique
+  descricao             String       @db.Text
+  ativo                 Boolean      @default(true)
+
+  pesoConteudoNovo      Int
+  pesoRevisaoFlashcards Int
+  pesoQuestoes          Int
+  pesoRevisaoErros      Int
+
+  duracaoMediaDias      Int
+  velocidadeRevisao     String
+  enfaseSimulados       String
+
+  planosEstudo          PlanoEstudo[]
+}
+
+model PlanoEstudo {
+  id                String             @id @default(cuid())
+  usuarioId         String             @unique
+  usuario           Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  metodoId          String
+  metodo            MetodoEstudo       @relation(fields: [metodoId], references: [id])
+  dataInicio        DateTime           @default(now())
+  ativo             Boolean            @default(true)
+
+  horasDia          Int?
+  diasSemana        Int[]              @default([1, 2, 3, 4, 5])
+  estudaFds         Boolean            @default(false)
+  dataProva         DateTime?
+  status            String             @default("ON_TRACK")
+  previsaoConclusao DateTime?
+
+  minutosConteudo   Int?
+  minutosFlashcards Int?
+  minutosQuestoes   Int?
+  minutosSimulado   Int?
+
+  ciclos            CicloEstudo[]
+  missoes           MissaoDiaria[]
+  revisoes          RevisaoProgramada[]
+  topicosCriticos   TopicoCritico[]
+}
+
+model CicloEstudo {
+  id                String          @id @default(cuid())
+  planoId           String
+  plano             PlanoEstudo     @relation(fields: [planoId], references: [id], onDelete: Cascade)
+  numero            Int
+  status            String          @default("EM_ANDAMENTO")
+  dataInicio        DateTime        @default(now())
+  dataConclusao     DateTime?
+  totalConteudos    Int             @default(0)
+  conteudosVistos   Int             @default(0)
+  totalFlashcards   Int             @default(0)
+  flashcardsVistos  Int             @default(0)
+  totalQuestoes     Int             @default(0)
+  acertos           Int             @default(0)
+  erros             Int             @default(0)
+  taxaAcerto        Float?
+  temasCriticos     Json            @default("[]")
+
+  historico         HistoricoCiclo?
+}
+
+model MissaoDiaria {
+  id                   String        @id @default(cuid())
+  planoId              String
+  plano                PlanoEstudo   @relation(fields: [planoId], references: [id], onDelete: Cascade)
+  data                 DateTime      @default(now())
+  concluida            Boolean       @default(false)
+
+  conteudosParaEstudar String[]      @default([])
+  revisoesParaFazer    String[]      @default([])
+  flashcardsParaFazer  String[]      @default([])
+  questoesParaFazer    Int           @default(0)
+  simuladoParaFazer    Boolean       @default(false)
+  errosParaRevisar     String[]      @default([])
+
+  tarefas              TarefaEstudo[]
+}
+
+model TarefaEstudo {
+  id          String        @id @default(cuid())
+  missaoId    String
+  missao      MissaoDiaria  @relation(fields: [missaoId], references: [id], onDelete: Cascade)
+  tipo        String
+  recursoId   String?
+  descricao   String
+  concluida   Boolean       @default(false)
+  concluidaEm DateTime?
+}
+
+model RevisaoProgramada {
+  id           String       @id @default(cuid())
+  planoId      String
+  plano        PlanoEstudo  @relation(fields: [planoId], references: [id], onDelete: Cascade)
+  temaId       String
+  dataRevisao  DateTime
+  concluida    Boolean      @default(false)
+  concluidaEm  DateTime?
+  intervalo    String
+}
+
+model TopicoCritico {
+  id             String       @id @default(cuid())
+  planoId        String
+  plano          PlanoEstudo  @relation(fields: [planoId], references: [id], onDelete: Cascade)
+  temaId         String
+  nome           String
+  totalErros     Int          @default(0)
+  taxaAcerto     Float        @default(0)
+  ultimaRevisao  DateTime?
+  nivel          String       @default("ALERTA")
+}
+
+model HistoricoCiclo {
+  id                String      @id @default(cuid())
+  cicloId           String      @unique
+  ciclo             CicloEstudo @relation(fields: [cicloId], references: [id], onDelete: Cascade)
+  usuarioId         String
+  usuario           Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  metodoNome        String
+  numeroCiclo       Int
+  dataInicio        DateTime
+  dataFim           DateTime
+  conteudosVistos   Int
+  flashcardsVistos  Int
+  questoesRealizadas Int
+  taxaAcerto        Float
+  temasCriticos     Json
+}

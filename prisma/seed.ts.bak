@@ -1,0 +1,206 @@
+/**
+ * prisma/seed.ts
+ * --------------
+ * Seed do banco de dados com o conteúdo extraído da Apostila SG.
+ *
+ * Pré-requisitos:
+ *   1. Prisma configurado com schema.prisma
+ *   2. Arquivos JSON em ../conteudo/
+ *      - materias.json
+ *      - temas.json
+ *      - topicos.json
+ *
+ * Executar com:
+ *   npx prisma db seed
+ */
+
+import { PrismaClient } from '@prisma/client'
+import * as fs from 'fs'
+import * as path from 'path'
+import * as bcrypt from 'bcryptjs'
+
+const prisma = new PrismaClient()
+
+interface MateriaSeed {
+  id: string
+  nome: string
+  codigo: string
+  slug: string
+  ordem: number
+}
+
+interface TemaSeed {
+  id: string
+  materiaId: string
+  titulo: string
+  slug: string
+  ordem: number
+}
+
+interface TopicoSeed {
+  id: string
+  temaId: string
+  titulo: string
+  slug: string
+  conteudo: string
+  ordem: number
+}
+
+function loadJson<T>(filename: string): T[] {
+  const filePath = path.join(__dirname, '..', 'conteudo', filename)
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Arquivo não encontrado: ${filePath}`)
+  }
+  const raw = fs.readFileSync(filePath, 'utf-8')
+  return JSON.parse(raw) as T[]
+}
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size))
+  }
+  return chunks
+}
+
+async function main() {
+  console.log('\n🪖  Iniciando seed da Apostila SG — CB → Sargento\n')
+
+  console.log('👤  Criando usuário admin...')
+  const senhaHash = await bcrypt.hash('Admin@2025', 12)
+
+  await prisma.usuario.upsert({
+    where: { email: 'admin@plataforma.com.br' },
+    update: {},
+    create: {
+      nome: 'Administrador',
+      email: 'admin@plataforma.com.br',
+      senhaHash,
+      ativo: true,
+      assinatura: {
+        create: {
+          status: 'ativo',
+          plano: 'vitalicio',
+          inicio: new Date(),
+        },
+      },
+    },
+  })
+  console.log('   ✓ admin@plataforma.com.br criado\n')
+
+  console.log('📚  Inserindo matérias...')
+  const materias = loadJson<MateriaSeed>('materias.json')
+
+  for (const m of materias) {
+    await prisma.materia.upsert({
+      where: { slug: m.slug },
+      update: { nome: m.nome, ordem: m.ordem },
+      create: {
+        id: m.id,
+        nome: m.nome,
+        slug: m.slug,
+        ordem: m.ordem,
+      },
+    })
+    process.stdout.write('.')
+  }
+  console.log(`\n   ✓ ${materias.length} matérias inseridas\n`)
+
+  console.log('📖  Inserindo temas (capítulos)...')
+  const temas = loadJson<TemaSeed>('temas.json')
+  const temaMap = new Map<string, string>() // slug_materia -> id_real
+
+  const temaChunks = chunk(temas, 50)
+  for (const lote of temaChunks) {
+    await Promise.all(
+      lote.map(async (t) => {
+        const key = `${t.materiaId}_${t.slug}`
+        const created = await prisma.tema.upsert({
+          where: { materiaId_slug: { materiaId: t.materiaId, slug: t.slug } },
+          update: { titulo: t.titulo, ordem: t.ordem },
+          create: {
+            id: t.id,
+            materiaId: t.materiaId,
+            titulo: t.titulo,
+            slug: t.slug,
+            ordem: t.ordem,
+          },
+        })
+        temaMap.set(key, created.id)
+      })
+    )
+    process.stdout.write('.')
+  }
+  console.log(`\n   ✓ ${temas.length} temas processados\n`)
+
+  console.log('📝  Inserindo tópicos (pode demorar alguns segundos)...')
+  const topicos = loadJson<TopicoSeed>('topicos.json')
+
+  // Criar um mapa de ID original -> ID real (canonical) para os tópicos
+  const originalToRealId = new Map<string, string>()
+  temas.forEach(t => {
+    const key = `${t.materiaId}_${t.slug}`
+    const realId = temaMap.get(key)
+    if (realId) {
+        originalToRealId.set(t.id, realId)
+    }
+  })
+
+  const topicosValidos = topicos.filter(
+    (t) => t.conteudo && t.conteudo.trim().length >= 20
+  ).map(t => ({
+    ...t,
+    temaId: originalToRealId.get(t.temaId) || t.temaId
+  }))
+
+  console.log(
+    `   → ${topicosValidos.length} tópicos válidos de ${topicos.length} total`
+  )
+
+  const topicoChunks = chunk(topicosValidos, 30)
+  let inseridos = 0
+
+  for (const lote of topicoChunks) {
+    await Promise.all(
+      lote.map((t) =>
+        prisma.topico.upsert({
+          where: { temaId_slug: { temaId: t.temaId, slug: t.slug } },
+          update: { titulo: t.titulo, conteudo: t.conteudo, ordem: t.ordem },
+          create: {
+            id: t.id,
+            temaId: t.temaId,
+            titulo: t.titulo,
+            slug: t.slug,
+            conteudo: t.conteudo,
+            ordem: t.ordem,
+          },
+        })
+      )
+    )
+    inseridos += lote.length
+    process.stdout.write(`\r   Progresso: ${inseridos}/${topicosValidos.length}`)
+  }
+
+  console.log(`\n   ✓ ${topicosValidos.length} tópicos inseridos\n`)
+
+  const countMaterias = await prisma.materia.count()
+  const countTemas    = await prisma.tema.count()
+  const countTopicos  = await prisma.topico.count()
+
+  console.log('═'.repeat(50))
+  console.log('🎯  SEED CONCLUÍDO')
+  console.log(`   Matérias : ${countMaterias}`)
+  console.log(`   Temas    : ${countTemas}`)
+  console.log(`   Tópicos  : ${countTopicos}`)
+  console.log('═'.repeat(50))
+  console.log()
+}
+
+main()
+  .catch((e) => {
+    console.error('\n❌ Erro durante o seed:', e)
+    process.exit(1)
+  })
+  .finally(async () => {
+    await prisma.$disconnect()
+  })

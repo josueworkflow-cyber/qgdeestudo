@@ -128,57 +128,6 @@ const INTERVALOS_REVISAO = [
 ];
 
 // ============================================================
-// DISTRIBUIÇÕES POR CICLO
-// ============================================================
-
-function getDistribuicaoCiclo(metodo: { pesoConteudoNovo: number; pesoRevisaoFlashcards: number; pesoQuestoes: number; pesoRevisaoErros: number }, numeroCiclo: number) {
-  let multConteudoNovo: number;
-  let multRevisao: number;
-  let multQuestoes: number;
-  let multErros: number;
-
-  switch (numeroCiclo) {
-    case 1:
-      multConteudoNovo = 1.3;
-      multRevisao = 0.8;
-      multQuestoes = 0.6;
-      multErros = 0.5;
-      break;
-    case 2:
-      multConteudoNovo = 0.7;
-      multRevisao = 1.2;
-      multQuestoes = 1.1;
-      multErros = 1.0;
-      break;
-    case 3:
-      multConteudoNovo = 0.4;
-      multRevisao = 1.3;
-      multQuestoes = 1.3;
-      multErros = 1.5;
-      break;
-    default:
-      multConteudoNovo = 0.2;
-      multRevisao = 1.5;
-      multQuestoes = 1.4;
-      multErros = 1.8;
-      break;
-  }
-
-  const rawNovo = metodo.pesoConteudoNovo * multConteudoNovo;
-  const rawRevisao = metodo.pesoRevisaoFlashcards * multRevisao;
-  const rawQuestoes = metodo.pesoQuestoes * multQuestoes;
-  const rawErros = metodo.pesoRevisaoErros * multErros;
-  const total = rawNovo + rawRevisao + rawQuestoes + rawErros;
-
-  return {
-    conteudoNovo: Math.round((rawNovo / total) * 100),
-    revisaoFlashcards: Math.round((rawRevisao / total) * 100),
-    questoes: Math.round((rawQuestoes / total) * 100),
-    revisaoErros: Math.round((rawErros / total) * 100),
-  };
-}
-
-// ============================================================
 // CÁLCULO DE STATUS DO CRONOGRAMA
 // ============================================================
 
@@ -436,8 +385,6 @@ export async function gerarMissaoDiaria(
   const ciclo = plano.ciclos[0];
   if (!ciclo) throw new Error("Ciclo ativo não encontrado");
 
-  const dist = getDistribuicaoCiclo(metodo, ciclo.numero);
-
   // Verificar se hoje é dia de descanso
   const hojeDiaSemana = new Date().getDay();
   const diaDescanso = plano.diasSemana.length > 0 && !plano.diasSemana.includes(hojeDiaSemana);
@@ -462,6 +409,8 @@ export async function gerarMissaoDiaria(
   const MINUTOS_POR_TEMA = 20;
   const MINUTOS_POR_FLASHCARD = 1.5;
   const MINUTOS_POR_QUESTAO = 2.5;
+  const horasDisponiveis = plano.horasDia || getHorasDiaPadrao(metodo.slug);
+  const minutosDisponiveis = horasDisponiveis * 60;
 
   let temasPorDia: number;
   let flashcardsPorDia: number;
@@ -473,12 +422,10 @@ export async function gerarMissaoDiaria(
     flashcardsPorDia = Math.max(0, Math.round((plano.minutosFlashcards || 0) / MINUTOS_POR_FLASHCARD));
     questoesPorDia = Math.max(0, Math.round((plano.minutosQuestoes || 0) / MINUTOS_POR_QUESTAO));
   } else {
-    // Métodos normais: distribuição percentual
-    const horasDisponiveis = plano.horasDia || getHorasDiaPadrao(metodo.slug);
-    const minutosDisponiveis = horasDisponiveis * 60;
-    temasPorDia = Math.max(1, Math.round((minutosDisponiveis * (dist.conteudoNovo / 100)) / MINUTOS_POR_TEMA));
-    flashcardsPorDia = Math.max(5, Math.round((minutosDisponiveis * (dist.revisaoFlashcards / 100)) / MINUTOS_POR_FLASHCARD));
-    questoesPorDia = Math.max(5, Math.round((minutosDisponiveis * (dist.questoes / 100)) / MINUTOS_POR_QUESTAO));
+    // Métodos normais: distribuição percentual (pesos brutos do método)
+    temasPorDia = Math.max(1, Math.round((minutosDisponiveis * (metodo.pesoConteudoNovo / 100)) / MINUTOS_POR_TEMA));
+    flashcardsPorDia = Math.max(1, Math.round((minutosDisponiveis * (metodo.pesoRevisaoFlashcards / 100)) / MINUTOS_POR_FLASHCARD));
+    questoesPorDia = Math.max(1, Math.round((minutosDisponiveis * (metodo.pesoQuestoes / 100)) / MINUTOS_POR_QUESTAO));
   }
 
   // Buscar temas ainda não estudados
@@ -592,7 +539,7 @@ export async function gerarMissaoDiaria(
       questoesParaFazer: questoesPorDia,
       simuladoParaFazer: metodo.slug === "sobrevivencia"
         ? (plano.minutosSimulado || 0) > 0
-        : dist.questoes >= 25 && ciclo.numero >= 2,
+        : metodo.pesoQuestoes >= 25 && ciclo.numero >= 2,
       errosParaRevisar: errosTemaIds,
     },
   });
@@ -690,17 +637,23 @@ export async function gerarCronogramaSemanal(
   });
   if (!plano) return [];
 
-  const ciclo = plano.ciclos[0];
-  const dist = getDistribuicaoCiclo(metodo, ciclo?.numero || 1);
-
   const MINUTOS_POR_TEMA = 20;
+  const MINUTOS_POR_FLASHCARD = 1.5;
+  const MINUTOS_POR_QUESTAO = 2.5;
+  const horasDisponiveis = plano.horasDia || getHorasDiaPadrao(metodo.slug);
+  const minutosDisponiveis = horasDisponiveis * 60;
   let temasPorDia: number;
+  let flashcardsPorDia: number;
+  let questoesPorDia: number;
 
   if (metodo.slug === "sobrevivencia" && plano.minutosConteudo != null) {
     temasPorDia = Math.max(0, Math.round(plano.minutosConteudo / MINUTOS_POR_TEMA));
+    flashcardsPorDia = Math.max(0, Math.round((plano.minutosFlashcards || 0) / MINUTOS_POR_FLASHCARD));
+    questoesPorDia = Math.max(0, Math.round((plano.minutosQuestoes || 0) / MINUTOS_POR_QUESTAO));
   } else {
-    const horasDisponiveis = plano.horasDia || getHorasDiaPadrao(metodo.slug);
-    temasPorDia = Math.max(1, Math.round((horasDisponiveis * 60 * (dist.conteudoNovo / 100)) / MINUTOS_POR_TEMA));
+    temasPorDia = Math.max(1, Math.round((minutosDisponiveis * (metodo.pesoConteudoNovo / 100)) / MINUTOS_POR_TEMA));
+    flashcardsPorDia = Math.max(1, Math.round((minutosDisponiveis * (metodo.pesoRevisaoFlashcards / 100)) / MINUTOS_POR_FLASHCARD));
+    questoesPorDia = Math.max(1, Math.round((minutosDisponiveis * (metodo.pesoQuestoes / 100)) / MINUTOS_POR_QUESTAO));
   }
 
   // Buscar temas pendentes
@@ -807,6 +760,12 @@ export async function gerarCronogramaSemanal(
 
     const tarefas: { tipo: string; descricao: string }[] = [];
 
+    // Minutos estimados para cada atividade (mesma lógica da missão diária)
+    const minutosConteudo = temasPorDia * MINUTOS_POR_TEMA;
+    const minutosFlash = Math.round(flashcardsPorDia * MINUTOS_POR_FLASHCARD);
+    const minutosQuest = Math.round(questoesPorDia * MINUTOS_POR_QUESTAO);
+    const minutosRestantes = Math.max(0, minutosDisponiveis - minutosConteudo - minutosFlash - minutosQuest);
+
     // Pegar matéria do pool intercalado
     const diaIdx = diasEstudoEstaSemana.findIndex(d => d.idx === i);
     if (diaIdx >= 0 && diaIdx < pool.length && temasPorDia > 0) {
@@ -815,21 +774,21 @@ export async function gerarCronogramaSemanal(
       if (materia) {
         tarefas.push({
           tipo: "CONTEUDO",
-          descricao: `Estudar: ${materia.nome} · ${temasPorDia * MINUTOS_POR_TEMA} min`,
+          descricao: `Estudar: ${materia.nome} · ${minutosConteudo} min`,
         });
       }
     }
 
     // Demais atividades
     if (metodo.slug === "combate") {
-      tarefas.push({ tipo: "QUESTAO", descricao: "Questões e simulados" });
-      tarefas.push({ tipo: "REVISAO_ERRO", descricao: "Revisão de erros" });
+      tarefas.push({ tipo: "QUESTAO", descricao: `Questões e simulados · ~${minutosQuest} min` });
+      tarefas.push({ tipo: "REVISAO_ERRO", descricao: `Revisão de erros · ~${minutosRestantes} min` });
     } else if (metodo.slug === "doutrina" || metodo.slug === "sobrevivencia") {
-      tarefas.push({ tipo: "REVISAO", descricao: "Revisão espaçada" });
-      tarefas.push({ tipo: "FLASHCARD", descricao: "Flashcards de memorização" });
+      tarefas.push({ tipo: "REVISAO", descricao: `Revisão espaçada · ~${minutosRestantes} min` });
+      tarefas.push({ tipo: "FLASHCARD", descricao: `Flashcards de memorização · ~${minutosFlash} min` });
     } else {
-      tarefas.push({ tipo: "FLASHCARD", descricao: "Flashcards de matérias recentes" });
-      tarefas.push({ tipo: "QUESTAO", descricao: "Questões de matérias alternadas" });
+      tarefas.push({ tipo: "FLASHCARD", descricao: `Flashcards de matérias recentes · ~${minutosFlash} min` });
+      tarefas.push({ tipo: "QUESTAO", descricao: `Questões de matérias alternadas · ~${minutosQuest} min` });
     }
 
     cronograma.push({ dia: diasNomes[diaSemana], data, tarefas });
@@ -1071,24 +1030,35 @@ export async function buscarDadosPlano(usuarioId: string): Promise<DadosPlanoEst
     const ehDiaDescanso = plano.diasSemana.length > 0 && !plano.diasSemana.includes(hojeSemana);
 
     if (ehDiaDescanso) {
-    // Não é dia de estudo: substituir missão existente por descanso
-    await prisma.tarefaEstudo.deleteMany({ where: { missaoId: missao.id } });
-    await prisma.missaoDiaria.update({
-      where: { id: missao.id },
-      data: {
-        concluida: true,
-        conteudosParaEstudar: [],
-        revisoesParaFazer: [],
-        flashcardsParaFazer: [],
-        questoesParaFazer: 0,
-        simuladoParaFazer: false,
-        errosParaRevisar: [],
-      },
-    });
-    missao = await prisma.missaoDiaria.findUnique({
-      where: { id: missao.id },
-      include: { tarefas: true },
-    });
+      // Não é dia de estudo: substituir missão existente por descanso
+      await prisma.tarefaEstudo.deleteMany({ where: { missaoId: missao.id } });
+      await prisma.missaoDiaria.update({
+        where: { id: missao.id },
+        data: {
+          concluida: true,
+          conteudosParaEstudar: [],
+          revisoesParaFazer: [],
+          flashcardsParaFazer: [],
+          questoesParaFazer: 0,
+          simuladoParaFazer: false,
+          errosParaRevisar: [],
+        },
+      });
+      missao = await prisma.missaoDiaria.findUnique({
+        where: { id: missao.id },
+        include: { tarefas: true },
+      });
+    } else if (!missao.concluida) {
+      // Missão não concluída: regenerar para refletir mudanças de código/config
+      await prisma.tarefaEstudo.deleteMany({ where: { missaoId: missao.id } });
+      await prisma.missaoDiaria.delete({ where: { id: missao.id } });
+      const novaMissao = await gerarMissaoDiaria(plano.id, cicloAtual?.id || plano.ciclos[0]?.id || "", plano.metodo);
+      missao = await prisma.missaoDiaria.findUnique({
+        where: { id: novaMissao.id },
+        include: { tarefas: true },
+      });
+    } else {
+      // Missão já concluída: mantém como está
     }
   }
 

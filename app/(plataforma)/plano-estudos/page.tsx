@@ -504,11 +504,18 @@ export default function PlanoEstudosPage() {
               {(() => {
                 const pesos = dados.plano.metodoPesos || metodoAtual.pesos;
                 const totalMin = configGeralForm.horasDia * 60;
+                const conteudoTemas = Math.max(1, Math.round((totalMin * pesos.conteudoNovo / 100) / 20));
+                const flashcardsQtd = Math.max(1, Math.round((totalMin * pesos.revisaoFlashcards / 100) / 1.5));
+                const questoesQtd = Math.max(1, Math.round((totalMin * pesos.questoes / 100) / 2.5));
+                const minConteudo = conteudoTemas * 20;
+                const minFlash = Math.round(flashcardsQtd * 1.5);
+                const minQuest = Math.round(questoesQtd * 2.5);
+                const minResto = Math.max(0, totalMin - minConteudo - minFlash - minQuest);
                 const itens = [
-                  { label: "Conteúdo novo", pct: pesos.conteudoNovo, min: Math.round(totalMin * pesos.conteudoNovo / 100) },
-                  { label: "Revisão + Flashcards", pct: pesos.revisaoFlashcards, min: Math.round(totalMin * pesos.revisaoFlashcards / 100) },
-                  { label: "Questões", pct: pesos.questoes, min: Math.round(totalMin * pesos.questoes / 100) },
-                  { label: "Revisão de erros", pct: pesos.revisaoErros, min: Math.round(totalMin * pesos.revisaoErros / 100) },
+                  { label: "Conteúdo novo", pct: pesos.conteudoNovo, min: minConteudo },
+                  { label: "Revisão + Flashcards", pct: pesos.revisaoFlashcards, min: minFlash },
+                  { label: "Questões", pct: pesos.questoes, min: minQuest },
+                  { label: "Revisão de erros", pct: pesos.revisaoErros, min: minResto },
                 ];
                 return itens.map((item) => (
                   <div key={item.label} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
